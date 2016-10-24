@@ -36,23 +36,8 @@
 /****************************************************************************/
 #include <string.h>
 #include "mydefine.h"
+#include "basicblock-graph.h"
 /****************************************************************************/
-//graph needed
-#include "boost/config.hpp"
-#include "boost/random.hpp"
-#include "boost/tuple/tuple.hpp"
-#include "boost/graph/adjacency_list.hpp"
-#include "boost/graph/adjacency_iterator.hpp"
-#include "boost/graph/visitors.hpp"
-#include "boost/graph/depth_first_search.hpp"
-#include "boost/graph/graphviz.hpp"
-
-/****************************************************************************/
-
-
-
-
-
 /* -icount align implementation. */
 
 typedef struct SyncClocks {
@@ -85,34 +70,14 @@ unsigned long long LAST_READ_ADDRESS[MAX_THREAD_NUM];
 unsigned long long LAST_WRITE_ADDRESS[MAX_THREAD_NUM];
 unsigned int PER_THREAD_WRITE_BINS[MAX_THREAD_NUM][BIN_SIZE];
 unsigned int PER_THREAD_READ_BINS[MAX_THREAD_NUM][BIN_SIZE];
+unsigned int LAST_BRANCH[MAX_THREAD_NUM];
+unsigned long long LAST_INST_ADDRESS[MAX_THREAD_NUM];
 
 ThreadGroup_Info thread_group;
 MutexMap_Info mutex_map;
 SharedAddress_Map sharedaddr_map;
 TempAddress_List tempWriteAddress_list;
 TempAddress_List tempReadAddress_list;
-
-//define graph struct
-struct basicBlock_t
-{
-    typedef vertex_property_tag kind;
-};
-typedef property <basicBlock_t, basic_blockObject, property<vertex_index_t, int, property<vertex_color_t, default_color_type, property<vertex_name_t, string> > > > NodeProperties;
-typedef property <edge_weight_t, float> EdgeWeightProperty;
-
-typedef adjacency_list <listS, listS, bidirectionalS, NodeProperties, EdgeWeightProperty> BBGraph;              //in_edges & out_edges
-
-typedef property_map <BBGraph, vertex_color_t>::type nodeColor_name_map_t;
-typedef property_map <BBGraph, vertex_index_t>::type nodeIndex_name_map_t;
-typedef property_map <BBGraph,  basicBlock_t >::type basicBlock_name_map_t;
-typedef property_map <BBGraph,  edge_weight_t>::type edgeWeight_name_map_t;
-typedef property_map <BBGraph,  vertex_name_t>::type nodeName_name_map_t;
-
-
-typedef graph_traits <BBGraph>::vertex_descriptor BBVertex;
-typedef map <unsigned int, BBVertex> BBVertexMap;                       //map -- BB Address -> Vertex
-
-
 
 
 void thread_insert(ThreadGroup_Info *tg,unsigned int pid){
@@ -222,6 +187,14 @@ unsigned int sharedaddr_map_insert(SharedAddress_Map *sharedaddr_map,unsigned lo
 	return 1;
 }
 
+void sharedaddr_map_print(SharedAddress_Map *sharedaddr_map){
+	SharedAddress_Pair * tmp=sharedaddr_map->head;
+	while(tmp!=NULL){
+		printf("[     sharedaddr_map_print]addr=0x%lx,threadid=%d\n",tmp->memoryAddress,tmp->threadID);
+		tmp=tmp->next;
+	}
+}
+
 
 void tempaddress_list_push(TempAddress_List *tempaddress_list,unsigned long addr){
 	TempAddress_Node *tmp=(TempAddress_Node *)malloc(sizeof(TempAddress_Node));
@@ -326,7 +299,9 @@ static void init_delay_params(SyncClocks *sc, const CPUState *cpu)
 #endif /* CONFIG USER ONLY */
 
 /**********************************************************************************************************/
+static inline void update_graph(){
 
+}
 static inline void critical_section_set(unsigned long long pc,unsigned int thread_id){
 	if(pc==instaddr_pthread_mutex_lock){
 		CS_FLAGS[thread_id]=1;
@@ -387,12 +362,43 @@ static inline void trace_qemu_pc_process(CPUArchState *env,TranslationBlock *itb
 			env->pid=pid;
 			env->tgid=tgid;
 			break;
+		case instaddr_do_exit:
+			threadinfo_addr=env_sp&(~threadinfo_addr_mask);
+			cpu_memory_rw_debug(ENV_GET_CPU(env),threadinfo_addr+16,(uint8_t *)&taskstruct_addr,8,0);
+			cpu_memory_rw_debug(ENV_GET_CPU(env),taskstruct_addr+992,(uint8_t *)&pid,4,0);
+			cpu_memory_rw_debug(ENV_GET_CPU(env),taskstruct_addr+996,(uint8_t *)&tgid,4,0);
+			if (pid==env->target_tgid && tgid==env->target_tgid && pid!=0){
+				//sharedaddr_map_print(&sharedaddr_map);
+				//printf("##%d  %d\n",PER_THREAD_READ_BINS[0][8],PER_THREAD_WRITE_BINS[0][8]);
+				printGoodbye();
+			}
+			break;
 		default:
 			break;
 	}
 	if (env->tgid==env->target_tgid){
+		/*
+		if (tb_pc<0x4fffff){
+			printf("[****pc*****]pc=%llx  icount=%d\n",tb_pc,itb->icount);
+			printf("[***branch***] isbranch=%d\n",LAST_BRANCH[env->pid-env->tgid]);
+		}else if (tb_pc<0xffffff0000000000){
+			printf("1");
+		}else{
+			printf("2");
+		}
+		*/
+		if (tb_pc == (LAST_INST_ADDRESS[env->pid-env->tgid]+4) && LAST_INST_ADDRESS[env->pid-env->tgid]!=0){
+			LAST_BRANCH[env->pid-env->tgid]=0;
+			update_graph();
+		}else if (tb_pc != (LAST_INST_ADDRESS[env->pid-env->tgid]+4) && LAST_INST_ADDRESS[env->pid-env->tgid]!=0){
+			LAST_BRANCH[env->pid-env->tgid]=1;
+			update_graph();
+		}
+		
 		INST_NUM[0]+=itb->icount;
 		INST_NUM[env->pid-env->tgid+1]+=itb->icount;
+		
+		
 		if(!thread_find(&thread_group,env->pid)){
 			thread_insert(&thread_group,env->pid);
 		}
@@ -425,32 +431,16 @@ static inline void trace_qemu_pc_process(CPUArchState *env,TranslationBlock *itb
 			//printf("[       pthread_mutex_unlock]pid=%d tgid=%d t_tgid=%d\n",env->pid,env->tgid,env->target_tgid);
 		//}
 		critical_section_set(tb_pc,env->pid-env->tgid);
+		LAST_INST_ADDRESS[env->pid-env->tgid]=tb_pc+(itb->icount-1)*4;
+		
+		
+		
 	}
 }
 /**********************************************************************************************************/
 
 
-void updateGraph(string *instructionsln,uint64_t bbAddress,uint32_t numInsructions,uint32_t threadID){
 
-	bool found;
-	bool inserted;
-	bool unique;
-
-//need define basic_blockObject  (basic_blockObject.hh)
-	basic_blockObject localBBObject;
-
-//boost needed
-BBVertexMap::iterator masterMapIterator;  //ADDRESS - DESCRIPTOR
-AddressMap::iterator bbMapIterator; 	  //ADDRESS - THREADID
-
-graph_traits <BBGraph>::edge_descriptor edgeDesc;
-basicBlock_name_map_t basicBlock = get(basicBlock_t(), myCFG[threadID]);
-edgeWeight_name_map_t edgeWeight = get(edge_weight, myCFG[threadID]);
-
-
-	
-
-}
 
 
 

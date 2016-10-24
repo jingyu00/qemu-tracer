@@ -36,18 +36,6 @@ typedef struct SharedAddress_Map{
 	unsigned int num;
 }SharedAddress_Map;
 
-typedef struct UniqueBB_Pair{
-	unsigned long bbAddress;
-	unsigned int threadID;
-	struct UniqueBB_Pair *prev;
-	struct UniqueBB_Pair *next;
-}UniqueBB_Pair;
-
-typedef struct UniqueBB_Map{
-	UniqueBB_Pair *head;
-	unsigned int num;
-}UniqueBB_Map;
-
 
 
 typedef struct TempAddress_Node{
@@ -59,15 +47,10 @@ typedef struct TempAddress_List{
 	unsigned int num;
 }TempAddress_List;
 
-
-
-
-
-
-
 #define MAX_THREAD_NUM 500
 #define instaddr_setup_arg_pages 0xffffff80081b7ca8
 #define instaddr_switch_to 0xffffff80080853b8
+#define instaddr_do_exit 0xffffff800809c8d8
 
 #define instaddr_pthread_create 0x400710
 #define instaddr_pthread_join 0x400730
@@ -82,7 +65,7 @@ void mutex_insert(MutexMap_Info *mmap,unsigned long mutex_addr,char *name);
 int mutex_find(MutexMap_Info *mmap,unsigned long mutex_addr);
 unsigned int sharedaddr_map_insert(SharedAddress_Map *sharedaddr_map,unsigned long addr,unsigned int threadid);
 void tempaddress_list_push(TempAddress_List *tempaddress_list,unsigned long addr);
-
+void sharedaddr_map_print(SharedAddress_Map *sharedaddr_map);
 
 
 
