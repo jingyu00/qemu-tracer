@@ -193,7 +193,7 @@ all-obj-$(CONFIG_SOFTMMU) += $(io-obj-y)
 $(QEMU_PROG_BUILD): config-devices.mak
 
 # build either PROG or PROGW
-$(QEMU_PROG_BUILD): $(all-obj-y) ../libqemuutil.a ../libqemustub.a
+$(QEMU_PROG_BUILD): $(all-obj-y) ../libqemuutil.a ../libqemustub.a basicblock-graph.o
 	$(call LINK, $(filter-out %.mak, $^))
 ifdef CONFIG_DARWIN
 	$(call quiet-command,Rez -append $(SRC_PATH)/pc-bios/qemu.rsrc -o $@,"  REZ   $(TARGET_DIR)$@")

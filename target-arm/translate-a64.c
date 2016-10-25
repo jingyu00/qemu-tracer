@@ -11079,8 +11079,26 @@ static void disas_data_proc_simd_fp(DisasContext *s, uint32_t insn)
 static void disas_a64_insn(CPUARMState *env, DisasContext *s)
 {
     uint32_t insn;
-
+	/*****************************************************************/
+	TranslationBlock *tb=s->tb;
     insn = arm_ldl_code(env, s->pc, s->sctlr_b);
+	if (env->tgid==env->target_tgid && env->target_tgid!=0){
+		char tmp[20];
+		sprintf(tmp,"%u",insn);
+		if (tb->mc_ptr==NULL){
+			tb->mc_ptr=(char *)malloc(strlen(tmp)+2);
+			strcpy(tb->mc_ptr,tmp);
+			strcat(tb->mc_ptr,"|");
+		}else{
+			char *tmp2=(char *)malloc(strlen(tb->mc_ptr)+strlen(tmp)+2);
+			strcpy(tmp2,tb->mc_ptr);
+			strcat(tmp2,tmp);
+			strcat(tmp2,"|");
+			free(tb->mc_ptr);
+			tb->mc_ptr=tmp2;
+		}
+	}
+	/*****************************************************************/
     s->insn = insn;
     s->pc += 4;
 

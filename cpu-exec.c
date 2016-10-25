@@ -72,6 +72,7 @@ unsigned int PER_THREAD_WRITE_BINS[MAX_THREAD_NUM][BIN_SIZE];
 unsigned int PER_THREAD_READ_BINS[MAX_THREAD_NUM][BIN_SIZE];
 unsigned int LAST_BRANCH[MAX_THREAD_NUM];
 unsigned long long LAST_INST_ADDRESS[MAX_THREAD_NUM];
+unsigned int LAST_BB_INST_NUM[MAX_THREAD_NUM];
 
 ThreadGroup_Info thread_group;
 MutexMap_Info mutex_map;
@@ -299,9 +300,6 @@ static void init_delay_params(SyncClocks *sc, const CPUState *cpu)
 #endif /* CONFIG USER ONLY */
 
 /**********************************************************************************************************/
-static inline void update_graph(){
-
-}
 static inline void critical_section_set(unsigned long long pc,unsigned int thread_id){
 	if(pc==instaddr_pthread_mutex_lock){
 		CS_FLAGS[thread_id]=1;
@@ -380,19 +378,20 @@ static inline void trace_qemu_pc_process(CPUArchState *env,TranslationBlock *itb
 		/*
 		if (tb_pc<0x4fffff){
 			printf("[****pc*****]pc=%llx  icount=%d\n",tb_pc,itb->icount);
-			printf("[***branch***] isbranch=%d\n",LAST_BRANCH[env->pid-env->tgid]);
+			//printf("[***branch***] isbranch=%d\n",LAST_BRANCH[env->pid-env->tgid]);
+			printf("[machine code]%s\n",itb->mc_ptr);
 		}else if (tb_pc<0xffffff0000000000){
-			printf("1");
+			//printf("1");
 		}else{
-			printf("2");
+			//printf("2");
 		}
 		*/
 		if (tb_pc == (LAST_INST_ADDRESS[env->pid-env->tgid]+4) && LAST_INST_ADDRESS[env->pid-env->tgid]!=0){
 			LAST_BRANCH[env->pid-env->tgid]=0;
-			update_graph();
+			updateGraph();
 		}else if (tb_pc != (LAST_INST_ADDRESS[env->pid-env->tgid]+4) && LAST_INST_ADDRESS[env->pid-env->tgid]!=0){
 			LAST_BRANCH[env->pid-env->tgid]=1;
-			update_graph();
+			updateGraph();
 		}
 		
 		INST_NUM[0]+=itb->icount;
@@ -432,7 +431,7 @@ static inline void trace_qemu_pc_process(CPUArchState *env,TranslationBlock *itb
 		//}
 		critical_section_set(tb_pc,env->pid-env->tgid);
 		LAST_INST_ADDRESS[env->pid-env->tgid]=tb_pc+(itb->icount-1)*4;
-		
+		LAST_BB_INST_NUM[env->pid-env->tgid]=itb->icount;
 		
 		
 	}

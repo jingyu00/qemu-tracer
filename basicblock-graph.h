@@ -1,10 +1,11 @@
-#ifndef __BASICBLOCK-GRAPG__H
-#define __BASICBLOCK-GRAPG__H
+#ifndef __BASICBLOCK_GRAPG__H
+#define __BASICBLOCK_GRAPG__H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-void printGoodbye();
+void printGoodbye(void);
+void updateGraph(char *inst,unsigned int threadid);
 #ifdef __cplusplus 
 };
 #endif
